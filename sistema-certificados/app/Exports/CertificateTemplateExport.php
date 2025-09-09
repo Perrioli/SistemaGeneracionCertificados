@@ -12,7 +12,6 @@ class CertificateTemplateExport implements FromCollection, WithHeadings
      */
     public function collection()
     {
-        // Devolvemos una colección vacía porque solo queremos las cabeceras.
         return collect([]);
     }
 

@@ -50,7 +50,6 @@ class AreaController extends Controller
 
     public function destroy(Area $area)
     {
-        // Verificamos si el área tiene cursos asociados.
         if ($area->courses()->count() > 0) {
             return redirect()->route('areas.index')
                 ->with('error', 'No se puede eliminar esta área porque está siendo utilizada por uno o más cursos.');
