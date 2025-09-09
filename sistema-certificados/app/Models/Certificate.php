@@ -15,14 +15,17 @@ class Certificate extends Model
         'person_id',
         'condition', // 'Tipo de certificado'
         'nota',
-        'codigo_incremental', 
-        'anio',   
+        'codigo_incremental',
+        'anio',
         'tipo_certificado',
         'iniciales',
         'tres_ultimos_digitos_dni',
         'unique_code', // nuestro 'CUV'
         'qr_path',
         'pdf_path',
+        'unidad_academica', 
+        'area_excel',  
+        'subarea',
     ];
 
     public function course(): BelongsTo

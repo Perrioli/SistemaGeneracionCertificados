@@ -25,16 +25,19 @@ class CertificateTemplateExport implements FromCollection, WithHeadings
     {
         return [
             'DNI',
-            'Nombre',
-            'Apellido',
-            'Curso',
-            'Nota',
-            'Codigo Incremental',
-            'Año',
-            'Tipo de certificado',
-            'Iniciales',
-            '3UltimosDigitosDni',
-            'CUV',
+            'NOMBRE',
+            'APELLIDO',
+            'CURSO',
+            'NOTA',
+            'UNIDAD ACADEMICA',
+            'AREA',
+            'SUBAREA',
+            'CODIGO INCREMENTAL',
+            'AÑO',
+            'TIPO CERTIFICADO',
+            'INICIALES',
+            '3 ULTIMOS DEL DNI',
+            'CUV'
         ];
     }
 }

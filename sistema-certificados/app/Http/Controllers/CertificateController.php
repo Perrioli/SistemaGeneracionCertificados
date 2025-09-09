@@ -11,33 +11,33 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\CertificateTemplateExport;
+use App\Imports\CertificatesImport;
+use Illuminate\Support\Facades\File;
+use iio\libmergepdf\Merger;
 use Throwable;
-use Illuminate\Support\Facades\Auth;
+
 
 class CertificateController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $user = Auth::user();
         $query = Certificate::query();
 
-        if ($user->role && $user->role->name === 'Persona') {
-
-            $dni = $user->person->dni ?? null;
-
-            if ($dni && !str_starts_with($dni, 'PENDIENTE-')) {
-
-                $personIds = \App\Models\Person::where('dni', $dni)->pluck('id');
-
-                $query->whereIn('person_id', $personIds);
-            } else {
-
-                $query->whereRaw('1 = 0');
-            }
+        // Aplicar filtros de búsqueda si existen
+        if ($request->filled('search_dni')) {
+            $query->whereHas('person', function ($q) use ($request) {
+                $q->where('dni', 'like', '%' . $request->search_dni . '%');
+            });
         }
+        if ($request->filled('search_course')) {
+            $query->whereHas('course', function ($q) use ($request) {
+                $q->where('nombre', 'like', '%' . $request->search_course . '%');
+            });
+        }
+        // ... (puedes añadir más filtros para otras columnas)
 
         $certificates = $query->with(['person', 'course'])->latest()->paginate(10);
         return view('certificates.index', compact('certificates'));
@@ -58,69 +58,87 @@ class CertificateController extends Controller
      */
     public function store(Request $request)
     {
-        // Validar los datos
         $request->validate([
             'course_id' => 'required|exists:courses,id',
             'person_id' => 'required|exists:persons,id',
             'condition' => 'required|string',
             'nota' => 'nullable|numeric|min:0',
+            'unidad_academica' => 'required|string|max:255',
+            'subarea' => 'required|string|max:255',
+            'iniciales' => 'required|string|max:255',
         ]);
 
-        // Obtener los modelos
         $course = \App\Models\Course::with(['resolution', 'area'])->find($request->course_id);
         $person = \App\Models\Person::find($request->person_id);
 
-        // Generar un código único si es que se genera de forma individual y sin plantilla excel
-        $uniqueCode = 'CERT-' . strtoupper(uniqid());
+        // Generar el CUV/unique_code (misma lógica que en el formulario)
+        $areaCode = strtoupper(substr($course->area->nombre ?? '', 0, 3));
+        $codigoIncremental = $person->id;
+        $anio = date('Y');
+        $tresUltimosDni = substr($person->dni, -3);
+        $conditionMap = ['Aprobado' => 'APR', 'Asistente' => 'ASI', 'Capacitador' => 'CAP'];
+        $conditionCode = $conditionMap[$request->condition] ?? '';
+        $uniqueCode = $request->unidad_academica . $areaCode . $request->subarea . $codigoIncremental . $anio . $conditionCode . $request->iniciales . $tresUltimosDni;
 
-        // Generar QR
-        $verificationUrl = route('certificates.verify', $uniqueCode);
-        $qrPath = 'qrcodes/' . $uniqueCode . '.svg';
-        \Illuminate\Support\Facades\Storage::disk('public')->makeDirectory('qrcodes');
-        \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')->size(150)->generate($verificationUrl, storage_path('app/public/' . $qrPath));
+        if (\App\Models\Certificate::where('unique_code', $uniqueCode)->exists()) {
+            return back()->withInput()->withErrors(['cuv' => 'El CUV generado para este certificado ya existe. Verifique los datos.']);
+        }
 
         // Preparar datos para las plantillas
+        $qrPath = 'qrcodes/' . $uniqueCode . '.svg';
         $data = [
             'person' => $person,
             'course' => $course,
-            'certificateData' => $request->all() + ['cuv' => $uniqueCode, 'tipo_de_certificado' => $request->condition, 'horas' => $course->horas],
+            'certificateData' => $request->all() + ['cuv' => $uniqueCode, 'tipo_de_certificado' => $request->condition, 'horas' => $course->horas, 'ano' => $anio],
             'qr_path' => storage_path('app/public/' . $qrPath),
         ];
 
-        // LÓGICA DE UNIÓN DE PDF 
+        // --- LÓGICA DE GENERACIÓN Y UNIÓN DE PDF OPTIMIZADA ---
+        $verificationUrl = route('certificates.verify', $uniqueCode);
+        \Illuminate\Support\Facades\Storage::disk('public')->makeDirectory('qrcodes');
+        \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')->size(150)->generate($verificationUrl, storage_path('app/public/' . $qrPath));
+
         $tempPath = storage_path('app/temp_pdf');
         \Illuminate\Support\Facades\File::ensureDirectoryExists($tempPath);
 
-        // Generar frente
         $pdfFront = \Barryvdh\DomPDF\Facade\Pdf::loadView('certificates.pdf_template_front', $data)->setPaper('a4', 'landscape');
         $frontFilePath = $tempPath . '/' . $uniqueCode . '_front.pdf';
         $pdfFront->save($frontFilePath);
 
-        // Generar dorso
         $pdfBack = \Barryvdh\DomPDF\Facade\Pdf::loadView('certificates.pdf_template_back', $data)->setPaper('a4', 'landscape');
         $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
         $pdfBack->save($backFilePath);
 
-        // Unir
+        unset($pdfFront, $pdfBack);
+
         $merger = new \iio\libmergepdf\Merger;
         $merger->addFile($frontFilePath);
         $merger->addFile($backFilePath);
         $finalPdfContent = $merger->merge();
 
-        // Guardar
         $pdfPath = 'certificates/' . $uniqueCode . '.pdf';
         \Illuminate\Support\Facades\Storage::disk('public')->put($pdfPath, $finalPdfContent);
 
         \Illuminate\Support\Facades\File::delete($frontFilePath, $backFilePath);
+        unset($finalPdfContent);
 
+        // Crear el registro del Certificado
         \App\Models\Certificate::create([
-            'course_id' => $request->course_id,
-            'person_id' => $request->person_id,
-            'condition' => $request->condition,
-            'nota' => $request->nota,
-            'unique_code' => $uniqueCode,
-            'qr_path' => $qrPath,
-            'pdf_path' => $pdfPath,
+            'course_id'       => $course->id,
+            'person_id'       => $person->id,
+            'condition'       => $request->condition,
+            'nota'            => $request->nota,
+            'unidad_academica'  => $request->unidad_academica,
+            'area_excel'        => $course->area->nombre ?? null,
+            'subarea'           => $request->subarea,
+            'codigo_incremental' => $codigoIncremental,
+            'anio'              => $anio,
+            'tipo_certificado'  => $conditionCode,
+            'iniciales'         => $request->iniciales,
+            'tres_ultimos_digitos_dni' => $tresUltimosDni,
+            'unique_code'     => $uniqueCode,
+            'qr_path'         => $qrPath,
+            'pdf_path'        => $pdfPath,
         ]);
 
         return redirect()->route('certificates.index')->with('success', 'Certificado generado exitosamente.');
@@ -141,29 +159,30 @@ class CertificateController extends Controller
         $import = new \App\Imports\CertificatesImport;
 
         try {
-            // The import() method from the package executes the 'collection' method in our class.
+            // Ejecutamos la importación completa en un solo paso
             \Maatwebsite\Excel\Facades\Excel::import($import, $request->file('excel_file'));
         } catch (Throwable $e) {
+            // En caso de un error crítico, lo mostramos
             return redirect()->route('certificates.index')
                 ->with('import_errors', ['Hubo un error crítico durante la importación: ' . $e->getMessage()]);
         }
 
+        // Obtenemos los resultados directamente
         $importedCount = $import->getImportedCount();
         $errors = $import->getErrors();
 
         $successMsg = "Proceso finalizado. Se importaron " . $importedCount . " certificados exitosamente.";
 
-        // If there were errors, we send them to the view along with the success message.
+        // Si hubo errores de validación en alguna fila, los mostramos
         if (!empty($errors)) {
             return redirect()->route('certificates.index')
                 ->with('success', $successMsg)
                 ->with('import_errors', $errors);
         }
 
-        // If everything was perfect, we just send the success message.
-        return redirect()->route('certificates.index')->with('success', $successMsg);
+        // Si todo fue perfecto, solo mostramos el mensaje de éxito
+        return redirect()->route('certificates.index')->with('success', 'La importación se ha realizado exitosamente.');
     }
-
     /**
      * Show the form for editing the specified resource.
      */
@@ -264,54 +283,43 @@ class CertificateController extends Controller
 
     public function showPreview()
     {
-        // Recuperamos los datos de la sesión
         $importData = session('import_data');
-
-        // Si no hay datos en la sesión, redirigimos de vuelta
         if (empty($importData)) {
             return redirect()->route('certificates.import.form');
         }
-
         return view('certificates.preview', ['importData' => $importData]);
     }
+
 
     public function processImport()
     {
         $importData = session('import_data');
-
         if (empty($importData)) {
-            return redirect()->route('certificates.import.form')->with('import_errors', ['No hay datos para importar.']);
+            return redirect()->route('certificates.import.form')->with('import_errors', ['No hay datos para importar o la sesión ha expirado.']);
         }
 
         $certificatesCreated = 0;
 
-        // Iteramos sobre los datos validados y creamos los certificados
         foreach ($importData as $row) {
-            // --- INICIO DE LA LÓGICA FALTANTE ---
-
-            // 1. Buscar los modelos relacionados
-            $course = Course::with('resolution')->where('nombre', $row['curso'])->first();
+            $course = Course::with(['resolution', 'area'])->where('nombre', $row['curso'])->first();
             $person = Person::firstOrCreate(
                 ['dni' => $row['dni']],
                 [
                     'apellido' => $row['apellido'],
-                    'nombre'   => $row['nombre'],
-                    'titulo'   => 'N/A',
+                    'nombre' => $row['nombre'],
+                    'titulo' => 'N/A',
                     'domicilio' => 'N/A',
-                    'telefono'  => 'N/A',
-                    'email'    => $row['dni'] . '@email-temporal.com',
+                    'telefono' => 'N/A',
+                    'email' => $row['dni'] . '@email-temporal.com',
                 ]
             );
 
-            // Si por alguna razón el curso no se encontrara, omitir
-            if (!$course) {
-                continue;
-            }
+            if (!$course) continue;
 
-            // 2. Generar QR y PDF (reutilizamos la lógica que ya funciona)
             $uniqueCode = $row['cuv'];
-            $verificationUrl = route('certificates.verify', $uniqueCode);
+
             $qrPath = 'qrcodes/' . $uniqueCode . '.svg';
+            $verificationUrl = route('certificates.verify', $uniqueCode);
             Storage::disk('public')->makeDirectory('qrcodes');
             \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')->size(150)->generate($verificationUrl, storage_path('app/public/' . $qrPath));
 
@@ -322,33 +330,54 @@ class CertificateController extends Controller
                 'qr_path' => storage_path('app/public/' . $qrPath),
             ];
 
-            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('certificates.pdf_template', $data)->setPaper('a4', 'landscape');
-            $pdfPath = 'certificates/' . $uniqueCode . '.pdf';
-            Storage::disk('public')->makeDirectory('certificates');
-            Storage::disk('public')->put($pdfPath, $pdf->output());
+            $tempPath = storage_path('app/temp_pdf');
+            File::ensureDirectoryExists($tempPath);
 
-            // 3. Crear el registro del certificado con todos los datos
+            $pdfFront = Pdf::loadView('certificates.pdf_template_front', $data)->setPaper('a4', 'landscape');
+            $frontFilePath = $tempPath . '/' . $uniqueCode . '_front.pdf';
+            $pdfFront->save($frontFilePath);
+
+            $pdfBack = Pdf::loadView('certificates.pdf_template_back', $data)->setPaper('a4', 'landscape');
+            $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
+            $pdfBack->save($backFilePath);
+
+            // **OPTIMIZACIÓN**: Liberar memoria de los objetos PDF
+            unset($pdfFront, $pdfBack);
+
+            $merger = new Merger;
+            $merger->addFile($frontFilePath);
+            $merger->addFile($backFilePath);
+            $finalPdfContent = $merger->merge();
+
+            $pdfPath = 'certificates/' . $uniqueCode . '.pdf';
+            Storage::disk('public')->put($pdfPath, $finalPdfContent);
+
+            File::delete($frontFilePath, $backFilePath);
+
+            // **OPTIMIZACIÓN**: Liberar memoria del contenido del PDF final
+            unset($finalPdfContent);
+
             Certificate::create([
                 'course_id'       => $course->id,
                 'person_id'       => $person->id,
                 'condition'       => $row['tipo_de_certificado'] ?? 'Aprobado',
                 'nota'            => $row['nota'] ?? null,
-                'codigo_incremental' => $row['codigo_incremental'] ?? null,
-                'anio'              => $row['ano'] ?? null,
-                'tipo_certificado'  => $row['tipo_de_certificado'] ?? 'Aprobado',
-                'iniciales'         => $row['iniciales'] ?? '',
-                'tres_ultimos_digitos_dni' => $row['3ultimosdigitosdni'] ?? null,
                 'unique_code'     => $uniqueCode,
                 'qr_path'         => $qrPath,
                 'pdf_path'        => $pdfPath,
+                'unidad_academica'  => $row['unidad_academica'] ?? null,
+                'area_excel'        => $row['area'] ?? null,
+                'subarea'           => $row['subarea'] ?? null,
+                'codigo_incremental' => $row['codigo_incremental'] ?? null,
+                'anio'              => $row['ano'] ?? null,
+                'tipo_certificado'  => $row['tipo_certificado'] ?? null,
+                'iniciales'         => $row['iniciales'] ?? null,
+                'tres_ultimos_digitos_dni' => $row['3_ultimos_del_dni'] ?? null,
             ]);
-
-            // --- FIN DE LA LÓGICA FALTANTE ---
 
             $certificatesCreated++;
         }
 
-        // Limpiamos los datos de la sesión
         session()->forget('import_data');
 
         return redirect()->route('certificates.index')
@@ -399,5 +428,14 @@ class CertificateController extends Controller
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('certificates.pdf_template', $data)->setPaper('a4', 'landscape');
 
         return $pdf->stream('previsualizacion_certificado.pdf');
+    }
+
+    public function getAreaByCourse(\App\Models\Course $course)
+    {
+        // Cargamos la relación 'area' y devolvemos una respuesta JSON
+        $course->load('area');
+        return response()->json([
+            'area_name' => $course->area->nombre ?? 'Sin Área Definida'
+        ]);
     }
 }

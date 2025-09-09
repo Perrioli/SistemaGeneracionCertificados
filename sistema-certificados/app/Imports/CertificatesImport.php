@@ -24,6 +24,16 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
     public function collection(Collection $rows)
     {
         foreach ($rows as $rowIndex => $row) {
+
+
+            $tipoCertificadoShort = strtoupper(trim($row['tipo_certificado'] ?? ''));
+            $conditionMap = [
+                'APR' => 'Aprobado',
+                'ASI' => 'Asistente',
+                'CAP' => 'Capacitador',
+            ];
+            $condition = $conditionMap[$tipoCertificadoShort] ?? 'Asistente';
+
             try {
                 $cleanedRow = [];
                 foreach ($row as $key => $value) {
@@ -58,7 +68,9 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                     [
                         'apellido' => $cleanedRow['apellido'] ?? 'N/A',
                         'nombre'   => $cleanedRow['nombre'] ?? 'N/A',
-                        'titulo'   => 'N/A', 'domicilio' => 'N/A', 'telefono'  => 'N/A',
+                        'titulo'   => 'N/A',
+                        'domicilio' => 'N/A',
+                        'telefono'  => 'N/A',
                         'email'    => $dni . '@email-temporal.com',
                     ]
                 );
@@ -70,8 +82,10 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                 QrCode::format('svg')->size(150)->generate($verificationUrl, storage_path('app/public/' . $qrPath));
 
                 $data = [
-                    'person' => $person, 'course' => $course,
-                    'certificateData' => $cleanedRow, 'qr_path' => storage_path('app/public/' . $qrPath),
+                    'person' => $person,
+                    'course' => $course,
+                    'certificateData' => $cleanedRow,
+                    'qr_path' => storage_path('app/public/' . $qrPath),
                 ];
 
                 $tempPath = storage_path('app/temp_pdf');
@@ -85,30 +99,39 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                 $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
                 $pdfBack->save($backFilePath);
 
+                unset($pdfFront, $pdfBack);
+
                 $merger = new Merger;
                 $merger->addFile($frontFilePath);
                 $merger->addFile($backFilePath);
                 $finalPdfContent = $merger->merge();
-                
+
                 $pdfPath = 'certificates/' . $uniqueCode . '.pdf';
                 Storage::disk('public')->put($pdfPath, $finalPdfContent);
-                
+
                 File::delete($frontFilePath, $backFilePath);
 
+                unset($finalPdfContent);
+
                 Certificate::create([
-                    'course_id' => $course->id, 'person_id' => $person->id,
-                    'condition' => (string) ($cleanedRow['tipo_de_certificado'] ?? 'Aprobado'),
-                    'nota' => $cleanedRow['nota'] ?? null,
-                    'codigo_incremental' => $cleanedRow['codigo_incremental'] ?? null,
-                    'anio' => $cleanedRow['ano'] ?? null,
-                    'tipo_certificado' => (string) ($cleanedRow['tipo_de_certificado'] ?? 'Aprobado'),
-                    'iniciales' => (string) ($cleanedRow['iniciales'] ?? ''),
-                    'tres_ultimos_digitos_dni' => $cleanedRow['3ultimosdigitosdni'] ?? null,
-                    'unique_code' => $uniqueCode, 'qr_path' => $qrPath, 'pdf_path' => $pdfPath,
+                    'course_id'       => $course->id,
+                    'person_id'       => $person->id,
+                    'condition'       => $condition,
+                    'nota'            => $row['nota'] ?? null,
+                    'unidad_academica' => $row['unidad_academica'] ?? null,
+                    'area_excel'      => $row['area'] ?? null,
+                    'subarea'         => $row['subarea'] ?? null,
+                    'codigo_incremental' => $row['codigo_incremental'] ?? null,
+                    'anio'              => $row['ano'] ?? null,
+                    'tipo_certificado'  => $tipoCertificadoShort,
+                    'iniciales'         => $row['iniciales'] ?? null,
+                    'tres_ultimos_digitos_dni' => $row['3_ultimos_del_dni'] ?? null,
+                    'unique_code'     => $row['cuv'],
+                    'qr_path'         => $qrPath,
+                    'pdf_path'        => $pdfPath,
                 ]);
 
                 $this->importedCount++;
-
             } catch (Throwable $e) {
                 $this->errors[] = "Error inesperado en la fila " . ($rowIndex + 2) . ": " . $e->getMessage();
                 continue;
@@ -117,6 +140,12 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
     }
 
 
-    public function getErrors() { return $this->errors; }
-    public function getImportedCount() { return $this->importedCount; }
+    public function getErrors()
+    {
+        return $this->errors;
+    }
+    public function getImportedCount()
+    {
+        return $this->importedCount;
+    }
 }

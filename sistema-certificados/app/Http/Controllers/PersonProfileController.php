@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Redirect;
 use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
 use App\Models\User;
+use App\Models\Person;
 
 class PersonProfileController extends Controller
 {

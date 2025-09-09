@@ -64,6 +64,7 @@ Route::middleware('auth')->group(function () {
     Route::get('certificates/import/preview', [CertificateController::class, 'showPreview'])->name('certificates.import.preview');
     Route::post('certificates/import/process', [CertificateController::class, 'processImport'])->name('certificates.import.process');
     Route::get('certificates/import/preview-pdf', [CertificateController::class, 'previewPdf'])->name('certificates.import.preview_pdf');
+    Route::get('/get-area-by-course/{course}', [CertificateController::class, 'getAreaByCourse'])->name('courses.get_area');
 
     // RUTAS EXCLUSIVAS PARA EL ROL "ROOT"
     Route::middleware('is.root')->group(function () {
