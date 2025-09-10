@@ -70,15 +70,11 @@
 {{-- La sección de JavaScript DEBE ir FUERA de la sección de content --}}
 @section('js')
 <script>
-    // Usamos event delegation en un elemento estático (la card)
-    // para asegurar que el script funcione incluso con paginación.
     $('.card-body').on('click', '.btn-delete', function(e) {
-        // Prevenimos el comportamiento por defecto del botón (enviar el formulario)
         e.preventDefault();
 
         var form = $(this).closest('form');
 
-        // Primera confirmación
         Swal.fire({
             title: '¿Estás seguro?',
             text: "El archivo PDF asociado será eliminado permanentemente.",
@@ -90,7 +86,6 @@
             cancelButtonText: 'Cancelar'
         }).then((result) => {
             if (result.isConfirmed) {
-                // Segunda confirmación (requiere escribir)
                 Swal.fire({
                     title: 'Confirmación Final',
                     html: `Para proceder, por favor escribe <strong>ELIMINAR</strong>.`,
@@ -106,7 +101,6 @@
                     }
                 }).then((result2) => {
                     if (result2.isConfirmed) {
-                        // Si todo es correcto, se envía el formulario
                         form.submit();
                     }
                 });

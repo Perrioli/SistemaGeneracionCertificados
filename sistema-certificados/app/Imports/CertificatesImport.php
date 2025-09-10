@@ -26,7 +26,7 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
         foreach ($rows as $rowIndex => $row) {
 
 
-            $tipoCertificadoShort = strtoupper(trim($row['tipo_certificado'] ?? ''));
+            $tipoCertificadoShort = strtoupper(trim($cleanedRow['tipo_certificado'] ?? ''));
             $conditionMap = [
                 'APR' => 'Aprobado',
                 'ASI' => 'Asistente',

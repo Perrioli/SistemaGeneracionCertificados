@@ -15,6 +15,10 @@ use App\Imports\CertificatesImport;
 use Illuminate\Support\Facades\File;
 use iio\libmergepdf\Merger;
 use Throwable;
+use App\Models\User;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\CertificateSent;
+use Illuminate\Support\Facades\Log;
 
 
 class CertificateController extends Controller
@@ -24,9 +28,17 @@ class CertificateController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Certificate::query();
+        $query = \App\Models\Certificate::query();
+        $user = auth()->user();
 
-        // Aplicar filtros de búsqueda si existen
+        if ($user->role && $user->role->name === 'Persona') {
+            if ($user->person) {
+                $query->where('person_id', $user->person->id);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        }
+
         if ($request->filled('search_dni')) {
             $query->whereHas('person', function ($q) use ($request) {
                 $q->where('dni', 'like', '%' . $request->search_dni . '%');
@@ -37,9 +49,8 @@ class CertificateController extends Controller
                 $q->where('nombre', 'like', '%' . $request->search_course . '%');
             });
         }
-        // 
 
-        $certificates = $query->with(['person', 'course'])->latest()->paginate(10);
+        $certificates = $query->with(['person', 'course.area'])->latest()->paginate(10);
         return view('certificates.index', compact('certificates'));
     }
 
@@ -71,7 +82,6 @@ class CertificateController extends Controller
         $course = \App\Models\Course::with(['resolution', 'area'])->find($request->course_id);
         $person = \App\Models\Person::find($request->person_id);
 
-    
         $areaCode = strtoupper(substr($course->area->nombre ?? '', 0, 3));
         $codigoIncremental = $person->id;
         $anio = date('Y');
@@ -84,7 +94,6 @@ class CertificateController extends Controller
             return back()->withInput()->withErrors(['cuv' => 'El CUV generado para este certificado ya existe. Verifique los datos.']);
         }
 
-        // Preparar datos para las plantillas
         $qrPath = 'qrcodes/' . $uniqueCode . '.svg';
         $data = [
             'person' => $person,
@@ -121,8 +130,8 @@ class CertificateController extends Controller
         \Illuminate\Support\Facades\File::delete($frontFilePath, $backFilePath);
         unset($finalPdfContent);
 
-        
-        \App\Models\Certificate::create([
+        // Crear el registro del Certificado
+        $certificate = \App\Models\Certificate::create([
             'course_id'       => $course->id,
             'person_id'       => $person->id,
             'condition'       => $request->condition,
@@ -139,6 +148,13 @@ class CertificateController extends Controller
             'qr_path'         => $qrPath,
             'pdf_path'        => $pdfPath,
         ]);
+
+        try {
+            Mail::to($person->email)->send(new CertificateSent($certificate));
+        } catch (Throwable $e) {
+
+            Log::error('Fallo al enviar el email del certificado: ' . $e->getMessage());
+        }
 
         return redirect()->route('certificates.index')->with('success', 'Certificado generado exitosamente.');
     }
@@ -164,12 +180,10 @@ class CertificateController extends Controller
                 ->with('import_errors', ['Hubo un error crítico durante la importación: ' . $e->getMessage()]);
         }
 
-
         $importedCount = $import->getImportedCount();
         $errors = $import->getErrors();
 
         $successMsg = "Proceso finalizado. Se importaron " . $importedCount . " certificados exitosamente.";
-
 
         if (!empty($errors)) {
             return redirect()->route('certificates.index')
@@ -184,6 +198,7 @@ class CertificateController extends Controller
      */
     public function edit(Certificate $certificate)
     {
+
         $courses = Course::orderBy('nombre')->get();
         $people = Person::orderBy('apellido')->get();
         return view('certificates.edit', compact('certificate', 'courses', 'people'));
@@ -211,7 +226,6 @@ class CertificateController extends Controller
         $verificationUrl = route('certificates.verify', $certificate->unique_code);
         $qrPath = 'qrcodes/' . $certificate->unique_code . '.svg';
         QrCode::format('svg')->size(150)->generate($verificationUrl, storage_path('app/public/' . $qrPath));
-
 
         $person = Person::find($request->person_id);
         $course = Course::find($request->course_id);
@@ -345,7 +359,7 @@ class CertificateController extends Controller
 
             unset($finalPdfContent);
 
-            Certificate::create([
+            $certificate = Certificate::create([
                 'course_id'       => $course->id,
                 'person_id'       => $person->id,
                 'condition'       => $row['tipo_de_certificado'] ?? 'Aprobado',
@@ -363,7 +377,16 @@ class CertificateController extends Controller
                 'tres_ultimos_digitos_dni' => $row['3_ultimos_del_dni'] ?? null,
             ]);
 
+
+
             $certificatesCreated++;
+            if ($person->email) {
+                try {
+                    Mail::to($person->email)->send(new CertificateSent($certificate));
+                } catch (Throwable $e) {
+                    Log::error('Fallo al enviar el email del certificado: ' . $e->getMessage());
+                }
+            }
         }
 
         session()->forget('import_data');
@@ -374,14 +397,18 @@ class CertificateController extends Controller
 
     public function previewPdf()
     {
+        // 1. Recuperar los datos de la sesión
         $importData = session('import_data');
 
+        // 2. Si no hay datos o están vacíos, redirigir
         if (empty($importData)) {
             return redirect()->route('certificates.import.form')->with('import_errors', ['No hay datos para previsualizar.']);
         }
 
+        // 3. Tomar solo la primera fila de datos para la muestra
         $firstRow = $importData[0];
 
+        // 4. Reutilizar la lógica de búsqueda de modelos
         $course = Course::with('resolution')->where('nombre', $firstRow['curso'])->first();
         $person = Person::firstOrCreate(
             ['dni' => $firstRow['dni']],
@@ -399,13 +426,16 @@ class CertificateController extends Controller
             return redirect()->route('certificates.import.preview')->with('import_errors', ['No se pudieron encontrar los datos para generar la vista previa.']);
         }
 
+        // 5. Preparar los datos para la plantilla PDF
         $data = [
             'person' => $person,
             'course' => $course,
             'certificateData' => $firstRow,
-            'qr_path' => public_path('images/logo.png'),
+            // Para la vista previa no necesitamos un QR real, podemos pasar una ruta de imagen de ejemplo
+            'qr_path' => public_path('images/logo.png'), // Usamos el logo como placeholder
         ];
 
+        // 6. Generar el PDF y mostrarlo en el navegador sin guardarlo
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('certificates.pdf_template', $data)->setPaper('a4', 'landscape');
 
         return $pdf->stream('previsualizacion_certificado.pdf');
@@ -413,6 +443,7 @@ class CertificateController extends Controller
 
     public function getAreaByCourse(\App\Models\Course $course)
     {
+        // Cargamos la relación 'area' y devolvemos una respuesta JSON
         $course->load('area');
         return response()->json([
             'area_name' => $course->area->nombre ?? 'Sin Área Definida'
