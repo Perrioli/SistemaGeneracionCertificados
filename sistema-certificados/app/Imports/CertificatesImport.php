@@ -15,6 +15,8 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Illuminate\Support\Facades\File;
 use iio\libmergepdf\Merger;
 use Throwable;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\CertificateSent;
 
 class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculatedFormulas
 {
@@ -113,7 +115,7 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
 
                 unset($finalPdfContent);
 
-                Certificate::create([
+                $certificate = Certificate::create([
                     'course_id'       => $course->id,
                     'person_id'       => $person->id,
                     'condition'       => $condition,
@@ -130,6 +132,14 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                     'qr_path'         => $qrPath,
                     'pdf_path'        => $pdfPath,
                 ]);
+                
+                if ($person->email) {
+                    try {
+                        Mail::to($person->email)->send(new CertificateSent($certificate));
+                    } catch (Throwable $e) {
+                        $this->errors[] = "Fila " . ($rowIndex + 2) . ": Certificado creado, pero falló el envío por email. Error: " . $e->getMessage();
+                    }
+                }
 
                 $this->importedCount++;
             } catch (Throwable $e) {

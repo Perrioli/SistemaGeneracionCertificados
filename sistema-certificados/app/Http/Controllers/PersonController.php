@@ -113,4 +113,22 @@ class PersonController extends Controller
             return back()->withErrors(['excel_file' => 'Hubo un error en la validación de algunas filas. Asegúrate de que no haya DNI o emails duplicados.']);
         }
     }
+
+    public function update(Request $request, Person $person)
+    {
+        $data = $request->validate([
+            'dni' => 'required|string|unique:persons,dni,' . $person->id,
+            'apellido' => 'required|string|max:255',
+            'nombre' => 'required|string|max:255',
+            'titulo' => 'required|string|max:255',
+            'domicilio' => 'required|string|max:255',
+            'telefono' => 'required|string|max:255',
+            'email' => 'required|email|unique:persons,email,' . $person->id,
+        ]);
+
+        $person->update($data);
+
+        return redirect()->route('persons.index')
+            ->with('success', 'Persona actualizada exitosamente.');
+    }
 }

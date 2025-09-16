@@ -19,6 +19,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\CertificateSent;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 
 class CertificateController extends Controller
@@ -29,7 +30,7 @@ class CertificateController extends Controller
     public function index(Request $request)
     {
         $query = \App\Models\Certificate::query();
-        $user = auth()->user();
+        $user = Auth::user();
 
         if ($user->role && $user->role->name === 'Persona') {
             if ($user->person) {
@@ -169,6 +170,8 @@ class CertificateController extends Controller
 
     public function import(Request $request)
     {
+        set_time_limit(0);
+
         $request->validate(['excel_file' => 'required|mimes:xlsx,xls']);
 
         $import = new \App\Imports\CertificatesImport;
