@@ -17,6 +17,12 @@
             color: #212529;
         }
 
+        .logo {
+            height: 18rem;
+            width: auto;
+            margin-bottom: 1.5rem;
+        }
+
         .main-container {
             display: flex;
             flex-direction: column;
@@ -81,6 +87,7 @@
         @endif
 
         <div class="content">
+            <img src="{{ asset('images/logoPreLogin.png') }}" alt="Logo" class="logo">
             <h1>Sistema de Gestión de Certificados</h1>
             <p>Una solución integral para la administración y emisión de certificados digitales.</p>
         </div>

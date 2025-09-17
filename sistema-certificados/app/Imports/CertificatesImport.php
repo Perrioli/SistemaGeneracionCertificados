@@ -36,6 +36,21 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                     }
                 }
 
+                $cursoNombre = isset($cleanedRow['curso']) ? trim($cleanedRow['curso']) : null;
+                $cuv = $cleanedRow['cuv'] ?? null;
+                $dni = $cleanedRow['dni'] ?? null;
+
+                if (empty($cursoNombre) || empty($cuv) || empty($dni)) {
+                    $this->errors[] = "Error en la fila " . ($rowIndex + 2) . ": Faltan datos esenciales (DNI, Curso o CUV).";
+                    continue;
+                }
+
+                $course = Course::with(['resolution', 'area'])->where('nombre', $cursoNombre)->first();
+                if (!$course) {
+                    $this->errors[] = "Error en la fila " . ($rowIndex + 2) . ": El curso '" . $cursoNombre . "' no fue encontrado en la base de datos.";
+                    continue;
+                }
+
                 $tipoCertificadoShort = strtoupper(trim($cleanedRow['tipo_certificado'] ?? ''));
                 $conditionMap = [
                     'APR' => 'Aprobado',
@@ -103,7 +118,7 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                 $pdfBack = Pdf::loadHTML($htmlBack)->setPaper('a4', 'landscape');
                 $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
                 $pdfBack->save($backFilePath);
-                
+
                 unset($pdfFront, $pdfBack);
 
                 $merger = new Merger;
@@ -150,6 +165,12 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
         }
     }
 
-    public function getErrors() { return $this->errors; }
-    public function getImportedCount() { return $this->importedCount; }
+    public function getErrors()
+    {
+        return $this->errors;
+    }
+    public function getImportedCount()
+    {
+        return $this->importedCount;
+    }
 }

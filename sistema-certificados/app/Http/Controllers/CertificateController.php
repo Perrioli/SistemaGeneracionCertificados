@@ -76,105 +76,105 @@ class CertificateController extends Controller
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
-{
-    $request->validate([
-        'course_id' => 'required|exists:courses,id',
-        'person_id' => 'required|exists:persons,id',
-        'condition' => 'required|string',
-        'nota' => 'nullable|numeric|min:0',
-        'unidad_academica' => 'required|string|max:255',
-        'subarea' => 'required|string|max:255',
-        'iniciales' => 'required|string|max:255',
-    ]);
+    {
+        $request->validate([
+            'course_id' => 'required|exists:courses,id',
+            'person_id' => 'required|exists:persons,id',
+            'condition' => 'required|string',
+            'nota' => 'nullable|numeric|min:0',
+            'unidad_academica' => 'required|string|max:255',
+            'subarea' => 'required|string|max:255',
+            'iniciales' => 'required|string|max:255',
+        ]);
 
-    $course = \App\Models\Course::with(['resolution', 'area'])->find($request->course_id);
-    $person = \App\Models\Person::find($request->person_id);
+        $course = \App\Models\Course::with(['resolution', 'area'])->find($request->course_id);
+        $person = \App\Models\Person::find($request->person_id);
 
-    $areaCode = strtoupper(substr($course->area->nombre ?? '', 0, 3));
-    $codigoIncremental = $person->id;
-    $anio = date('Y');
-    $tresUltimosDni = substr($person->dni, -3);
-    $conditionMap = ['Aprobado' => 'APR', 'Asistente' => 'ASI', 'Capacitador' => 'CAP'];
-    $conditionCode = $conditionMap[$request->condition] ?? '';
-    $uniqueCode = $request->unidad_academica . $areaCode . $request->subarea . $codigoIncremental . $anio . $conditionCode . $request->iniciales . $tresUltimosDni;
+        $areaCode = strtoupper(substr($course->area->nombre ?? '', 0, 3));
+        $codigoIncremental = $person->id;
+        $anio = date('Y');
+        $tresUltimosDni = substr($person->dni, -3);
+        $conditionMap = ['Aprobado' => 'APR', 'Asistente' => 'ASI', 'Capacitador' => 'CAP'];
+        $conditionCode = $conditionMap[$request->condition] ?? '';
+        $uniqueCode = $request->unidad_academica . $areaCode . $request->subarea . $codigoIncremental . $anio . $conditionCode . $request->iniciales . $tresUltimosDni;
 
-    if (\App\Models\Certificate::where('unique_code', $uniqueCode)->exists()) {
-        return back()->withInput()->withErrors(['cuv' => 'El CUV generado para este certificado ya existe. Verifique los datos.']);
+        if (\App\Models\Certificate::where('unique_code', $uniqueCode)->exists()) {
+            return back()->withInput()->withErrors(['cuv' => 'El CUV generado para este certificado ya existe. Verifique los datos.']);
+        }
+
+        $qrPath = 'qrcodes/' . $uniqueCode . '.svg';
+        $data = [
+            'person' => $person,
+            'course' => $course,
+            'certificateData' => $request->all() + ['cuv' => $uniqueCode, 'tipo_de_certificado' => $request->condition, 'horas' => $course->horas, 'ano' => $anio],
+            'qr_path' => storage_path('app/public/' . $qrPath),
+        ];
+
+        $verificationUrl = route('certificates.verify', $uniqueCode);
+        \Illuminate\Support\Facades\Storage::disk('public')->makeDirectory('qrcodes');
+        \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')->size(150)->generate($verificationUrl, storage_path('app/public/' . $qrPath));
+
+
+        $templateFront = $course->area->template_front;
+        $templateBack = $course->area->template_back;
+
+        if (empty($templateFront) || empty($templateBack)) {
+            return back()->withInput()->withErrors(['template' => 'El Área de este curso no tiene plantillas de certificado definidas.']);
+        }
+
+        $htmlFront = \Illuminate\Support\Facades\Blade::render($templateFront, $data);
+        $htmlBack = \Illuminate\Support\Facades\Blade::render($templateBack, $data);
+
+        $tempPath = storage_path('app/temp_pdf');
+        \Illuminate\Support\Facades\File::ensureDirectoryExists($tempPath);
+
+        $pdfFront = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($htmlFront)->setPaper('a4', 'landscape');
+        $frontFilePath = $tempPath . '/' . $uniqueCode . '_front.pdf';
+        $pdfFront->save($frontFilePath);
+
+        $pdfBack = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($htmlBack)->setPaper('a4', 'landscape');
+        $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
+        $pdfBack->save($backFilePath);
+
+        unset($pdfFront, $pdfBack);
+
+
+        $merger = new \iio\libmergepdf\Merger;
+        $merger->addFile($frontFilePath);
+        $merger->addFile($backFilePath);
+        $finalPdfContent = $merger->merge();
+
+        $pdfPath = 'certificates/' . $uniqueCode . '.pdf';
+        \Illuminate\Support\Facades\Storage::disk('public')->put($pdfPath, $finalPdfContent);
+
+        \Illuminate\Support\Facades\File::delete($frontFilePath, $backFilePath);
+        unset($finalPdfContent);
+
+        $certificate = \App\Models\Certificate::create([
+            'course_id'       => $course->id,
+            'person_id'       => $person->id,
+            'condition'       => $request->condition,
+            'nota'            => $request->nota,
+            'unidad_academica'  => $request->unidad_academica,
+            'area_excel'        => $course->area->nombre ?? null,
+            'subarea'           => $request->subarea,
+            'codigo_incremental' => $codigoIncremental,
+            'anio'              => $anio,
+            'tipo_certificado'  => $conditionCode,
+            'iniciales'         => $request->iniciales,
+            'tres_ultimos_digitos_dni' => $tresUltimosDni,
+            'unique_code'     => $uniqueCode,
+            'qr_path'         => $qrPath,
+            'pdf_path'        => $pdfPath,
+        ]);
+
+        try {
+            \Illuminate\Support\Facades\Mail::to($person->email)->send(new \App\Mail\CertificateSent($certificate));
+        } catch (Throwable $e) {
+        }
+
+        return redirect()->route('certificates.index')->with('success', 'Certificado generado y enviado exitosamente.');
     }
-
-    $qrPath = 'qrcodes/' . $uniqueCode . '.svg';
-    $data = [
-        'person' => $person,
-        'course' => $course,
-        'certificateData' => $request->all() + ['cuv' => $uniqueCode, 'tipo_de_certificado' => $request->condition, 'horas' => $course->horas, 'ano' => $anio],
-        'qr_path' => storage_path('app/public/' . $qrPath),
-    ];
-
-    $verificationUrl = route('certificates.verify', $uniqueCode);
-    \Illuminate\Support\Facades\Storage::disk('public')->makeDirectory('qrcodes');
-    \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')->size(150)->generate($verificationUrl, storage_path('app/public/' . $qrPath));
-    
-
-    $templateFront = $course->area->template_front;
-    $templateBack = $course->area->template_back;
-
-    if (empty($templateFront) || empty($templateBack)) {
-        return back()->withInput()->withErrors(['template' => 'El Área de este curso no tiene plantillas de certificado definidas.']);
-    }
-
-    $htmlFront = \Illuminate\Support\Facades\Blade::render($templateFront, $data);
-    $htmlBack = \Illuminate\Support\Facades\Blade::render($templateBack, $data);
-
-    $tempPath = storage_path('app/temp_pdf');
-    \Illuminate\Support\Facades\File::ensureDirectoryExists($tempPath);
-
-    $pdfFront = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($htmlFront)->setPaper('a4', 'landscape');
-    $frontFilePath = $tempPath . '/' . $uniqueCode . '_front.pdf';
-    $pdfFront->save($frontFilePath);
-
-    $pdfBack = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($htmlBack)->setPaper('a4', 'landscape');
-    $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
-    $pdfBack->save($backFilePath);
-    
-    unset($pdfFront, $pdfBack);
-
-
-    $merger = new \iio\libmergepdf\Merger;
-    $merger->addFile($frontFilePath);
-    $merger->addFile($backFilePath);
-    $finalPdfContent = $merger->merge();
-    
-    $pdfPath = 'certificates/' . $uniqueCode . '.pdf';
-    \Illuminate\Support\Facades\Storage::disk('public')->put($pdfPath, $finalPdfContent);
-    
-    \Illuminate\Support\Facades\File::delete($frontFilePath, $backFilePath);
-    unset($finalPdfContent);
-    
-    $certificate = \App\Models\Certificate::create([
-        'course_id'       => $course->id,
-        'person_id'       => $person->id,
-        'condition'       => $request->condition,
-        'nota'            => $request->nota,
-        'unidad_academica'  => $request->unidad_academica,
-        'area_excel'        => $course->area->nombre ?? null,
-        'subarea'           => $request->subarea,
-        'codigo_incremental' => $codigoIncremental,
-        'anio'              => $anio,
-        'tipo_certificado'  => $conditionCode,
-        'iniciales'         => $request->iniciales,
-        'tres_ultimos_digitos_dni' => $tresUltimosDni,
-        'unique_code'     => $uniqueCode,
-        'qr_path'         => $qrPath,
-        'pdf_path'        => $pdfPath,
-    ]);
-    
-    try {
-        \Illuminate\Support\Facades\Mail::to($person->email)->send(new \App\Mail\CertificateSent($certificate));
-    } catch (Throwable $e) {
-    }
-
-    return redirect()->route('certificates.index')->with('success', 'Certificado generado y enviado exitosamente.');
-}
 
 
     public function import(Request $request)
@@ -408,41 +408,41 @@ class CertificateController extends Controller
     }
 
     public function previewPdf()
-{
-    $importData = session('import_data');
-    if (empty($importData)) {
-        return redirect()->route('certificates.import.form')->with('import_errors', ['No hay datos para previsualizar.']);
+    {
+        $importData = session('import_data');
+        if (empty($importData)) {
+            return redirect()->route('certificates.import.form')->with('import_errors', ['No hay datos para previsualizar.']);
+        }
+
+        $firstRow = $importData[0];
+        $course = \App\Models\Course::with(['resolution', 'area'])->where('nombre', $firstRow['curso'])->first();
+        $person = \App\Models\Person::firstOrCreate(
+            ['dni' => $firstRow['dni']],
+            ['apellido' => $firstRow['apellido'], 'nombre' => $firstRow['nombre'], 'titulo'   => 'N/A', 'domicilio' => 'N/A', 'telefono'  => 'N/A', 'email'    => $firstRow['dni'] . '@email-temporal.com']
+        );
+
+        if (!$course || !$person) {
+            return redirect()->route('certificates.import.preview')->with('import_errors', ['No se pudieron encontrar los datos para generar la vista previa.']);
+        }
+
+        $data = [
+            'person' => $person,
+            'course' => $course,
+            'certificateData' => $firstRow,
+            'qr_path' => public_path('images/logo.png'),
+        ];
+
+        $templateFront = $course->area->template_front;
+
+        if (empty($templateFront)) {
+            return response("Error: El Área de este curso no tiene una plantilla de certificado definida para la previsualización.", 500);
+        }
+
+        $htmlFront = \Illuminate\Support\Facades\Blade::render($templateFront, $data);
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($htmlFront)->setPaper('a4', 'landscape');
+        return $pdf->stream('previsualizacion_certificado.pdf');
     }
-    
-    $firstRow = $importData[0];
-    $course = \App\Models\Course::with(['resolution', 'area'])->where('nombre', $firstRow['curso'])->first();
-    $person = \App\Models\Person::firstOrCreate(
-        ['dni' => $firstRow['dni']],
-        ['apellido' => $firstRow['apellido'], 'nombre' => $firstRow['nombre'], 'titulo'   => 'N/A', 'domicilio' => 'N/A', 'telefono'  => 'N/A', 'email'    => $firstRow['dni'] . '@email-temporal.com']
-    );
-
-    if (!$course || !$person) {
-        return redirect()->route('certificates.import.preview')->with('import_errors', ['No se pudieron encontrar los datos para generar la vista previa.']);
-    }
-
-    $data = [
-        'person' => $person,
-        'course' => $course,
-        'certificateData' => $firstRow,
-        'qr_path' => public_path('images/logo.png'),
-    ];
-
-    $templateFront = $course->area->template_front;
-
-    if (empty($templateFront)) {
-        return response("Error: El Área de este curso no tiene una plantilla de certificado definida para la previsualización.", 500);
-    }
-
-    $htmlFront = \Illuminate\Support\Facades\Blade::render($templateFront, $data);
-
-    $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($htmlFront)->setPaper('a4', 'landscape');
-    return $pdf->stream('previsualizacion_certificado.pdf');
-}
 
     public function getAreaByCourse(\App\Models\Course $course)
     {
@@ -450,5 +450,9 @@ class CertificateController extends Controller
         return response()->json([
             'area_name' => $course->area->nombre ?? 'Sin Área Definida'
         ]);
+    }
+    public function showImportForm()
+    {
+        return view('certificates.import');
     }
 }

@@ -9,6 +9,7 @@
 
 @section('content')
 {{-- TARJETA PARA LOS FILTROS DE BÚSQUEDA (COLAPSADA POR DEFECTO) --}}
+@can('is-admin-or-root')
 <div class="card card-primary collapsed-card">
     <div class="card-header">
         <h3 class="card-title">Filtros de Búsqueda</h3>
@@ -41,7 +42,7 @@
         </form>
     </div>
 </div>
-
+@endcan
 {{-- TARJETA PRINCIPAL CON LA TABLA DE CERTIFICADOS --}}
 <div class="card">
     @can('is-admin-or-root')
