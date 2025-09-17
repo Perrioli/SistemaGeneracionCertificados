@@ -30,6 +30,11 @@
                     <td>{{ $area->descripcion }}</td>
                     <td class="d-flex">
                         <a href="{{ route('areas.edit', $area->id) }}" class="btn btn-sm btn-info mr-2">Editar</a>
+                        @if($area->template_front && $area->template_back)
+                        <a href="{{ route('areas.preview', $area->id) }}" target="_blank" class="btn btn-sm btn-secondary mr-2">
+                            Previsualizar
+                        </a>
+                        @endif
                         <form action="{{ route('areas.destroy', $area->id) }}" method="POST" onsubmit="return confirm('¿Estás seguro?');">
                             @csrf
                             @method('DELETE')

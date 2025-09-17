@@ -171,7 +171,6 @@ class CertificateController extends Controller
     try {
         \Illuminate\Support\Facades\Mail::to($person->email)->send(new \App\Mail\CertificateSent($certificate));
     } catch (Throwable $e) {
-        // No hacemos nada si el email falla
     }
 
     return redirect()->route('certificates.index')->with('success', 'Certificado generado y enviado exitosamente.');

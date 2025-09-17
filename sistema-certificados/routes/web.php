@@ -48,7 +48,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/mi-perfil', [PersonProfileController::class, 'edit'])->name('persona.profile.edit');
     Route::put('/mi-perfil', [PersonProfileController::class, 'update'])->name('persona.profile.update');
 
-
+    // Rutas para previsualización de plantillas de área
+    Route::get('/areas/{area}/preview', [AreaController::class, 'previewTemplate'])->name('areas.preview');
 
 
     // Módulos CRUD para Administradores y Root
