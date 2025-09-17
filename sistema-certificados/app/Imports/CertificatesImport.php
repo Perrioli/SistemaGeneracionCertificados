@@ -17,6 +17,7 @@ use iio\libmergepdf\Merger;
 use Throwable;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\CertificateSent;
+use Illuminate\Support\Facades\Blade;
 
 class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculatedFormulas
 {
@@ -26,16 +27,6 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
     public function collection(Collection $rows)
     {
         foreach ($rows as $rowIndex => $row) {
-
-
-            $tipoCertificadoShort = strtoupper(trim($cleanedRow['tipo_certificado'] ?? ''));
-            $conditionMap = [
-                'APR' => 'Aprobado',
-                'ASI' => 'Asistente',
-                'CAP' => 'Capacitador',
-            ];
-            $condition = $conditionMap[$tipoCertificadoShort] ?? 'Asistente';
-
             try {
                 $cleanedRow = [];
                 foreach ($row as $key => $value) {
@@ -44,6 +35,14 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                         $cleanedRow[$newKey] = $value;
                     }
                 }
+
+                $tipoCertificadoShort = strtoupper(trim($cleanedRow['tipo_certificado'] ?? ''));
+                $conditionMap = [
+                    'APR' => 'Aprobado',
+                    'ASI' => 'Asistente',
+                    'CAP' => 'Capacitador',
+                ];
+                $condition = $conditionMap[$tipoCertificadoShort] ?? 'Asistente';
 
                 $cursoNombre = $cleanedRow['curso'] ?? null;
                 $cuv = $cleanedRow['cuv'] ?? null;
@@ -67,14 +66,7 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
 
                 $person = Person::firstOrCreate(
                     ['dni' => $dni],
-                    [
-                        'apellido' => $cleanedRow['apellido'] ?? 'N/A',
-                        'nombre'   => $cleanedRow['nombre'] ?? 'N/A',
-                        'titulo'   => 'N/A',
-                        'domicilio' => 'N/A',
-                        'telefono'  => 'N/A',
-                        'email'    => $dni . '@email-temporal.com',
-                    ]
+                    ['apellido' => $cleanedRow['apellido'] ?? 'N/A', 'nombre' => $cleanedRow['nombre'] ?? 'N/A', 'titulo' => 'N/A', 'domicilio' => 'N/A', 'telefono' => 'N/A', 'email' => $dni . '@email-temporal.com']
                 );
 
                 $uniqueCode = $cuv;
@@ -90,17 +82,28 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                     'qr_path' => storage_path('app/public/' . $qrPath),
                 ];
 
+                $templateFront = $course->area->template_front;
+                $templateBack = $course->area->template_back;
+
+                if (empty($templateFront) || empty($templateBack)) {
+                    $this->errors[] = "Fila " . ($rowIndex + 2) . ": El Área '" . $course->area->nombre . "' no tiene plantillas de certificado definidas.";
+                    continue;
+                }
+
+                $htmlFront = Blade::render($templateFront, $data);
+                $htmlBack = Blade::render($templateBack, $data);
+
                 $tempPath = storage_path('app/temp_pdf');
                 File::ensureDirectoryExists($tempPath);
 
-                $pdfFront = Pdf::loadView('certificates.pdf_template_front', $data)->setPaper('a4', 'landscape');
+                $pdfFront = Pdf::loadHTML($htmlFront)->setPaper('a4', 'landscape');
                 $frontFilePath = $tempPath . '/' . $uniqueCode . '_front.pdf';
                 $pdfFront->save($frontFilePath);
 
-                $pdfBack = Pdf::loadView('certificates.pdf_template_back', $data)->setPaper('a4', 'landscape');
+                $pdfBack = Pdf::loadHTML($htmlBack)->setPaper('a4', 'landscape');
                 $backFilePath = $tempPath . '/' . $uniqueCode . '_back.pdf';
                 $pdfBack->save($backFilePath);
-
+                
                 unset($pdfFront, $pdfBack);
 
                 $merger = new Merger;
@@ -112,50 +115,41 @@ class CertificatesImport implements ToCollection, WithHeadingRow, WithCalculated
                 Storage::disk('public')->put($pdfPath, $finalPdfContent);
 
                 File::delete($frontFilePath, $backFilePath);
-
                 unset($finalPdfContent);
 
                 $certificate = Certificate::create([
                     'course_id'       => $course->id,
                     'person_id'       => $person->id,
                     'condition'       => $condition,
-                    'nota'            => $row['nota'] ?? null,
-                    'unidad_academica' => $row['unidad_academica'] ?? null,
-                    'area_excel'      => $row['area'] ?? null,
-                    'subarea'         => $row['subarea'] ?? null,
-                    'codigo_incremental' => $row['codigo_incremental'] ?? null,
-                    'anio'              => $row['ano'] ?? null,
+                    'nota'            => $cleanedRow['nota'] ?? null,
+                    'unidad_academica' => $cleanedRow['unidad_academica'] ?? null,
+                    'area_excel'      => $cleanedRow['area'] ?? null,
+                    'subarea'         => $cleanedRow['subarea'] ?? null,
+                    'codigo_incremental' => $cleanedRow['codigo_incremental'] ?? null,
+                    'anio'              => $cleanedRow['ano'] ?? null,
                     'tipo_certificado'  => $tipoCertificadoShort,
-                    'iniciales'         => $row['iniciales'] ?? null,
-                    'tres_ultimos_digitos_dni' => $row['3_ultimos_del_dni'] ?? null,
-                    'unique_code'     => $row['cuv'],
+                    'iniciales'         => $cleanedRow['iniciales'] ?? null,
+                    'tres_ultimos_digitos_dni' => $cleanedRow['3_ultimos_del_dni'] ?? null,
+                    'unique_code'     => $uniqueCode,
                     'qr_path'         => $qrPath,
                     'pdf_path'        => $pdfPath,
                 ]);
-                
-                if ($person->email) {
+
+                if ($person->email && !str_ends_with($person->email, '@email-temporal.com')) {
                     try {
                         Mail::to($person->email)->send(new CertificateSent($certificate));
                     } catch (Throwable $e) {
-                        $this->errors[] = "Fila " . ($rowIndex + 2) . ": Certificado creado, pero falló el envío por email. Error: " . $e->getMessage();
+                        $this->errors[] = "Fila " . ($rowIndex + 2) . ": Certificado creado, pero falló el envío por email.";
                     }
                 }
 
                 $this->importedCount++;
             } catch (Throwable $e) {
                 $this->errors[] = "Error inesperado en la fila " . ($rowIndex + 2) . ": " . $e->getMessage();
-                continue;
             }
         }
     }
 
-
-    public function getErrors()
-    {
-        return $this->errors;
-    }
-    public function getImportedCount()
-    {
-        return $this->importedCount;
-    }
+    public function getErrors() { return $this->errors; }
+    public function getImportedCount() { return $this->importedCount; }
 }

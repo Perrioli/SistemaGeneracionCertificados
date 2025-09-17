@@ -37,16 +37,18 @@ class AreaController extends Controller
     }
 
     public function update(Request $request, Area $area)
-    {
-        $data = $request->validate([
-            'nombre' => 'required|string|max:255|unique:areas,nombre,' . $area->id,
-            'descripcion' => 'nullable|string',
-        ]);
+{
+    $data = $request->validate([
+        'nombre' => 'required|string|max:255|unique:areas,nombre,' . $area->id,
+        'descripcion' => 'nullable|string',
+        'template_front' => 'nullable|string',
+        'template_back' => 'nullable|string', 
+    ]);
 
-        $area->update($data);
+    $area->update($data);
 
-        return redirect()->route('areas.index')->with('success', 'Área actualizada exitosamente.');
-    }
+    return redirect()->route('areas.index')->with('success', 'Área actualizada exitosamente.');
+}
 
     public function destroy(Area $area)
     {

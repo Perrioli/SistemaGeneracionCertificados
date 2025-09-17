@@ -335,7 +335,7 @@ return [
             'text' => 'Áreas',
             'route'  => 'areas.index',
             'icon' => 'fas fa-fw fa-sitemap',
-            'can'  => 'is-admin-or-root',
+            'can'  => 'is-root',
         ],
         [
             'text' => 'Cursos',
