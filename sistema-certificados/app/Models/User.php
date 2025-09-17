@@ -57,4 +57,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(Person::class);
     }
+
+    public function area()
+    {
+        return $this->belongsTo(Area::class);
+    }
 }

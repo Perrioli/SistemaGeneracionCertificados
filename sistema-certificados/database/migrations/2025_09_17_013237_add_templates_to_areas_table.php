@@ -11,10 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('certificates', function (Blueprint $table) {
-            $table->string('unidad_academica')->nullable()->after('nota');
-            $table->string('area_excel')->nullable()->after('unidad_academica'); 
-            $table->string('subarea')->nullable()->after('area_excel');
+        Schema::table('areas', function (Blueprint $table) {
+            $table->longText('template_front')->nullable()->after('descripcion');
+            $table->longText('template_back')->nullable()->after('template_front');
         });
     }
 
@@ -23,7 +22,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('certificates', function (Blueprint $table) {
+        Schema::table('areas', function (Blueprint $table) {
             //
         });
     }

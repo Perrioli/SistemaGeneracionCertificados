@@ -7,7 +7,7 @@ use App\Models\Course;
 
 class Area extends Model
 {
-   protected $fillable = ['nombre', 'descripcion'];
+   protected $fillable = ['nombre', 'descripcion', 'template_front', 'template_back'];
 
 
    public function courses()

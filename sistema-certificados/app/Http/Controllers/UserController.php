@@ -7,6 +7,7 @@ use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules;
+use App\Models\Area;
 
 class UserController extends Controller
 {
@@ -20,7 +21,8 @@ class UserController extends Controller
     public function create()
     {
         $roles = Role::all();
-        return view('users.create', compact('roles'));
+        $areas = Area::all();
+        return view('users.create', compact('roles', 'areas'));
     }
 
     public function store(Request $request)
@@ -30,6 +32,7 @@ class UserController extends Controller
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
             'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
             'role_id' => ['required', 'exists:roles,id'],
+            'area_id' => ['nullable', 'exists:areas,id'],
         ]);
 
 
@@ -38,6 +41,7 @@ class UserController extends Controller
             'email' => $request->email,
             'password' => \Illuminate\Support\Facades\Hash::make($request->password),
             'role_id' => $request->role_id,
+            'area_id' => $request->area_id,
         ]);
 
         $role = \App\Models\Role::find($request->role_id);
@@ -60,7 +64,8 @@ class UserController extends Controller
     public function edit(User $user)
     {
         $roles = Role::all();
-        return view('users.edit', compact('user', 'roles'));
+        $areas = Area::all();
+        return view('users.edit', compact('user', 'roles', 'areas'));
     }
 
     public function update(Request $request, \App\Models\User $user)
@@ -69,12 +74,18 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
             'role_id' => ['required', 'exists:roles,id'],
+            'area_id' => ['nullable', 'exists:areas,id'],
             'password' => ['nullable', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
         ]);
 
-        $data = $request->only('name', 'email', 'role_id');
+        $data = $request->only('name', 'email', 'role_id', 'area_id');
         if ($request->filled('password')) {
             $data['password'] = \Illuminate\Support\Facades\Hash::make($request->password);
+        }
+
+        $role = Role::find($request->role_id);
+        if ($role->name !== 'Administrador') {
+            $data['area_id'] = null;
         }
 
         $user->update($data);
