@@ -7,6 +7,8 @@ use App\Models\Course;
 use App\Models\Resolution;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Area;
+use Illuminate\Support\Facades\Auth;
+use App\Models\User;
 
 class CourseController extends Controller
 {
@@ -15,8 +17,15 @@ class CourseController extends Controller
      */
     public function index()
     {
-        $courses = Course::with(['resolution', 'area'])->latest()->paginate(10);
+        $user = Auth::user();
+        $query = Course::query();
 
+        if ($user->role) {
+            if ($user->role->name === 'Administrador' && $user->area_id) {
+                $query->where('area_id', $user->area_id);
+            }
+        }
+        $courses = $query->with(['resolution', 'area'])->latest()->paginate(10);
         return view('courses.index', compact('courses'));
     }
 
@@ -36,7 +45,7 @@ class CourseController extends Controller
      */
     public function store(Request $request)
     {
- 
+
         $data = $request->validate([
             'area_id' => 'required|exists:areas,id',
             'nro_curso' => 'required|string|max:255',

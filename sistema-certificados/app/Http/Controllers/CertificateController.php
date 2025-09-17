@@ -40,6 +40,12 @@ class CertificateController extends Controller
             }
         }
 
+        if ($user->role && $user->role->name === 'Administrador' && $user->area_id) {
+            $query->whereHas('course', function ($q) use ($user) {
+                $q->where('area_id', $user->area_id);
+            });
+        }
+
         if ($request->filled('search_dni')) {
             $query->whereHas('person', function ($q) use ($request) {
                 $q->where('dni', 'like', '%' . $request->search_dni . '%');
