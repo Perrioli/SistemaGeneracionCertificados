@@ -9,6 +9,7 @@ use App\Imports\PersonsImport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
+use App\Models\Area;
 
 class PersonController extends Controller
 {
@@ -26,7 +27,8 @@ class PersonController extends Controller
      */
     public function create()
     {
-        return view('persons.create');
+        $areas = Area::all();
+        return view('persons.create', compact('areas'));
     }
 
     /**
@@ -34,7 +36,7 @@ class PersonController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
+        $data = $request->validate([
             'dni' => ['required', 'string', Rule::unique('persons')->whereNull('deleted_at')],
             'apellido' => 'required|string|max:255',
             'nombre' => 'required|string|max:255',
@@ -42,9 +44,10 @@ class PersonController extends Controller
             'domicilio' => 'required|string|max:255',
             'telefono' => 'required|string|max:255',
             'email' => ['required', 'email', Rule::unique('persons')->whereNull('deleted_at')],
+            'area_id' => 'required|exists:areas,id',
         ]);
 
-        Person::create($request->all());
+        Person::create($data);
 
         return redirect()->route('persons.index')
             ->with('success', 'Persona creada exitosamente.');
@@ -62,9 +65,10 @@ class PersonController extends Controller
      * Show the form for editing the specified resource.
      */
     public function edit(Person $person)
-    {
-        return view('persons.edit', compact('person'));
-    }
+{
+    $areas = Area::all();
+    return view('persons.edit', compact('person', 'areas'));
+}
 
     /**
      * Update the specified resource in storage.
@@ -124,6 +128,7 @@ class PersonController extends Controller
             'domicilio' => 'required|string|max:255',
             'telefono' => 'required|string|max:255',
             'email' => 'required|email|unique:persons,email,' . $person->id,
+            'area_id' => 'required|exists:areas,id',
         ]);
 
         $person->update($data);

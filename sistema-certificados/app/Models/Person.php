@@ -29,8 +29,13 @@ class Person extends Model
         return $this->belongsTo(User::class);
     }
 
-        public function certificates()
+    public function certificates()
     {
         return $this->hasMany(Certificate::class);
+    }
+
+    public function area()
+    {
+        return $this->belongsTo(\App\Models\Area::class);
     }
 }

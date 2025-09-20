@@ -6,6 +6,9 @@ use App\Models\Resolution;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Auth;
+use App\Models\User;
+use App\Models\Area;
 
 
 class ResolutionController extends Controller
@@ -15,19 +18,27 @@ class ResolutionController extends Controller
      */
     public function index()
     {
-        $resolutions = Resolution::latest()->paginate(10);
+        $user = Auth::user();
+        $query = Resolution::query();
+
+        if ($user->role?->name === 'Administrador' && $user->area_id) {
+            $query->where('area_id', $user->area_id);
+        }
+
+        $resolutions = $query->latest()->paginate(10);
         return view('resolutions.index', compact('resolutions'));
     }
 
     public function create()
     {
-        return view('resolutions.create');
+        $areas = Area::all();
+        return view('resolutions.create', compact('areas'));
     }
 
 
     public function store(Request $request)
     {
-        $request->validate([
+        $data = $request->validate([
             'numero' => [
                 'required',
                 'string',
@@ -40,7 +51,11 @@ class ResolutionController extends Controller
             'anio' => 'required|integer|digits:4|min:1901|max:2155',
             'area' => 'required|string|max:255',
             'pdf_file' => 'required|file|mimes:pdf',
+            'area_id' => 'required|exists:areas,id',
+            'pdf_file' => 'required|file|mimes:pdf',
         ]);
+
+        $data['pdf_path'] = $request->file('pdf_file')->store('resolutions', 'public');
 
 
         $filePath = $request->file('pdf_file')->store('resolutions', 'public');
@@ -57,12 +72,13 @@ class ResolutionController extends Controller
 
     public function edit(Resolution $resolution)
     {
-        return view('resolutions.edit', compact('resolution'));
+        $areas = Area::all();
+        return view('resolutions.edit', compact('resolution', 'areas'));
     }
 
     public function update(Request $request, Resolution $resolution)
     {
-        $request->validate([
+        $data = $request->validate([
             'numero' => [
                 'required',
                 'string',
@@ -74,6 +90,8 @@ class ResolutionController extends Controller
             ],
             'anio' => 'required|integer|digits:4|min:1901|max:2155',
             'area' => 'required|string|max:255',
+            'pdf_file' => 'nullable|file|mimes:pdf',
+            'area_id' => 'required|exists:areas,id',
             'pdf_file' => 'nullable|file|mimes:pdf',
         ]);
 
@@ -99,5 +117,4 @@ class ResolutionController extends Controller
         return redirect()->route('resolutions.index')
             ->with('success', 'Resolución eliminada exitosamente.');
     }
-
 }
