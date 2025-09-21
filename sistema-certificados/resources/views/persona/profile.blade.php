@@ -47,6 +47,44 @@
                     <div class="form-group"><label>Email (no editable)</label><input type="email" class="form-control" value="{{ $person->email }}" disabled></div>
                 </div>
             </div>
+            <div class="card card-outline card-secondary collapsed-card mt-4">
+                <div class="card-header">
+                    <h3 class="card-title">Cambiar Contraseña</h3>
+
+                    {{-- Herramientas de la tarjeta que contienen el botón para plegar/desplegar --}}
+                    <div class="card-tools">
+                        <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{{ route('password.update') }}">
+                        @csrf
+                        @method('put')
+
+                        <div class="form-group">
+                            <label for="current_password">Contraseña Actual</label>
+                            <input id="current_password" name="current_password" type="password" class="form-control" autocomplete="current-password">
+                            @error('current_password', 'updatePassword') <span class="text-danger">{{ $message }}</span> @enderror
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password">Nueva Contraseña</label>
+                            <input id="password" name="password" type="password" class="form-control" autocomplete="new-password">
+                            @error('password', 'updatePassword') <span class="text-danger">{{ $message }}</span> @enderror
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password_confirmation">Confirmar Nueva Contraseña</label>
+                            <input id="password_confirmation" name="password_confirmation" type="password" class="form-control" autocomplete="new-password">
+                            @error('password_confirmation', 'updatePassword') <span class="text-danger">{{ $message }}</span> @enderror
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Guardar Contraseña</button>
+                    </form>
+                </div>
+            </div>
             <button type="submit" class="btn btn-primary">Guardar Cambios</button>
         </form>
     </div>

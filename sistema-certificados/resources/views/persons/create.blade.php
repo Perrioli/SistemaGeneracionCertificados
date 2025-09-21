@@ -71,17 +71,20 @@
 
             <div class="form-group">
                 <label for="area_id">Área Asignada</label>
+
+                @if(auth()->user()->role?->name === 'Administrador')
+                {{-- Para el Administrador: Muestra su área y la oculta en un campo --}}
+                <input type="hidden" name="area_id" value="{{ auth()->user()->area_id }}">
+                <input type="text" class="form-control" value="{{ auth()->user()->area->nombre ?? 'Sin Área' }}" disabled>
+                @else
+                {{-- Para el Root: Muestra el selector con todas las áreas --}}
                 <select name="area_id" class="form-control" required>
                     <option value="">Seleccione un Área</option>
                     @foreach($areas as $area)
-                    <option value="{{ $area->id }}"
-                        {{-- Para el formulario de edición, esto selecciona el área correcta --}}
-                        @if(isset($person) && $person->area_id == $area->id) selected @endif
-                        >
-                        {{ $area->nombre }}
-                    </option>
+                    <option value="{{ $area->id }}">{{ $area->nombre }}</option>
                     @endforeach
                 </select>
+                @endif
             </div>
 
             <button type="submit" class="btn btn-primary">Guardar</button>

@@ -10,6 +10,9 @@ use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
 use App\Models\Area;
+use App\Models\Role;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 
 class PersonController extends Controller
 {
@@ -24,9 +27,9 @@ class PersonController extends Controller
         if ($user->role?->name === 'Administrador' && $user->area_id) {
             $query->where('area_id', $user->area_id);
         }
-    
+
         $people = $query->latest()->paginate(10);
-    
+
         return view('persons.index', compact('people'));
     }
 
@@ -35,7 +38,14 @@ class PersonController extends Controller
      */
     public function create()
     {
+        $user = Auth::user();
         $areas = Area::all();
+
+        // Si el usuario es Administrador pasamos su propia área.
+        if ($user->role?->name === 'Administrador') {
+            $areas = Area::where('id', $user->area_id)->get();
+        }
+
         return view('persons.create', compact('areas'));
     }
 
@@ -52,11 +62,28 @@ class PersonController extends Controller
             'titulo' => 'required|string|max:255',
             'domicilio' => 'required|string|max:255',
             'telefono' => 'required|string|max:255',
-            'email' => 'required|email|unique:persons,email',
+            'email' => 'required|email|unique:persons,email|unique:users,email',
             'area_id' => 'required|exists:areas,id',
         ]);
-        Person::create($data);
-        return redirect()->route('persons.index')->with('success', 'Persona creada exitosamente.');
+
+        $person = Person::create($data);
+
+        $personaRole = Role::where('name', 'Persona')->first();
+
+        if ($personaRole) {
+            $user = User::create([
+                'name'     => $person->nombre . ' ' . $person->apellido,
+                'email'    => $person->email,
+                'password' => Hash::make($person->dni), // El DNI como contraseña por defecto
+                'role_id'  => $personaRole->id,
+                'area_id'  => $person->area_id,
+            ]);
+
+            $person->user_id = $user->id;
+            $person->save();
+        }
+
+        return redirect()->route('persons.index')->with('success', 'Persona y cuenta de usuario creadas exitosamente.');
     }
 
 
