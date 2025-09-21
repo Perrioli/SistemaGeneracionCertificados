@@ -48,11 +48,12 @@ class UserController extends Controller
         if ($role && $role->name === 'Persona') {
             \App\Models\Person::create([
                 'user_id' => $user->id,
+                'area_id' => $user->area_id,
                 'dni' => 'PENDIENTE-' . $user->id,
                 'apellido' => $user->name,
                 'nombre' => '(completar)',
                 'email' => $user->email,
-                'titulo' => 'N/A',
+                'titulo'   => 'N/A',
                 'domicilio' => 'N/A',
                 'telefono'  => 'N/A',
             ]);

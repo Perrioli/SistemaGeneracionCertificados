@@ -18,7 +18,15 @@ class PersonController extends Controller
      */
     public function index()
     {
-        $people = Person::latest()->paginate(10);
+        $user = Auth::user();
+        $query = Person::query();
+
+        if ($user->role?->name === 'Administrador' && $user->area_id) {
+            $query->where('area_id', $user->area_id);
+        }
+    
+        $people = $query->latest()->paginate(10);
+    
         return view('persons.index', compact('people'));
     }
 
@@ -31,27 +39,26 @@ class PersonController extends Controller
         return view('persons.create', compact('areas'));
     }
 
+
     /**
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
     {
         $data = $request->validate([
-            'dni' => ['required', 'string', Rule::unique('persons')->whereNull('deleted_at')],
+            'dni' => 'required|string|unique:persons,dni',
             'apellido' => 'required|string|max:255',
             'nombre' => 'required|string|max:255',
             'titulo' => 'required|string|max:255',
             'domicilio' => 'required|string|max:255',
             'telefono' => 'required|string|max:255',
-            'email' => ['required', 'email', Rule::unique('persons')->whereNull('deleted_at')],
+            'email' => 'required|email|unique:persons,email',
             'area_id' => 'required|exists:areas,id',
         ]);
-
         Person::create($data);
-
-        return redirect()->route('persons.index')
-            ->with('success', 'Persona creada exitosamente.');
+        return redirect()->route('persons.index')->with('success', 'Persona creada exitosamente.');
     }
+
 
     /**
      * Display the specified resource.
@@ -65,10 +72,10 @@ class PersonController extends Controller
      * Show the form for editing the specified resource.
      */
     public function edit(Person $person)
-{
-    $areas = Area::all();
-    return view('persons.edit', compact('person', 'areas'));
-}
+    {
+        $areas = Area::all();
+        return view('persons.edit', compact('person', 'areas'));
+    }
 
     /**
      * Update the specified resource in storage.
@@ -97,11 +104,8 @@ class PersonController extends Controller
             return redirect()->route('persons.index')
                 ->with('error', 'No se puede eliminar esta persona porque tiene certificados asociados.');
         }
-
         $person->delete();
-
-        return redirect()->route('persons.index')
-            ->with('success', 'Persona eliminada exitosamente.');
+        return redirect()->route('persons.index')->with('success', 'Persona eliminada exitosamente.');
     }
 
     public function import(Request $request)
@@ -133,7 +137,6 @@ class PersonController extends Controller
 
         $person->update($data);
 
-        return redirect()->route('persons.index')
-            ->with('success', 'Persona actualizada exitosamente.');
+        return redirect()->route('persons.index')->with('success', 'Persona actualizada exitosamente.');
     }
 }

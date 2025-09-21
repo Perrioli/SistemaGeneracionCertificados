@@ -22,6 +22,7 @@ class Person extends Model
         'domicilio',
         'telefono',
         'email',
+        'area_id',
     ];
 
     public function user()
