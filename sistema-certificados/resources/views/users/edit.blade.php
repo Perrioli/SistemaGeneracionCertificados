@@ -66,10 +66,9 @@
 @section('js')
 <script>
     $(document).ready(function() {
-        // Función para mostrar/ocultar el selector de área
         function toggleAreaSelect() {
             var selectedRoleName = $('#role_id').find('option:selected').data('role-name');
-            if (selectedRoleName === 'Administrador') {
+            if (selectedRoleName === 'Administrador' || selectedRoleName === 'Persona') {
                 $('#area-select-container').show();
             } else {
                 $('#area-select-container').hide();

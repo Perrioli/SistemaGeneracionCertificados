@@ -84,7 +84,7 @@ class UserController extends Controller
         }
 
         $role = Role::find($request->role_id);
-        if ($role->name !== 'Administrador') {
+        if (!in_array($role->name, ['Administrador', 'Persona'])) {
             $data['area_id'] = null;
         }
 

@@ -15,12 +15,7 @@ class Resolution extends Model
      *
      * @var array<int, string>
      */
-    protected $fillable = [
-        'numero',
-        'anio',
-        'area',
-        'pdf_path',
-    ];
+    protected $fillable = ['numero', 'anio', 'area_id', 'area', 'pdf_path'];
 
     /**
      * The attributes that should be mutated to dates.

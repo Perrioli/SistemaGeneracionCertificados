@@ -35,9 +35,9 @@ class ResolutionController extends Controller
         return view('resolutions.create', compact('areas'));
     }
 
-
     public function store(Request $request)
     {
+        // Validar los datos recibidos
         $data = $request->validate([
             'numero' => [
                 'required',
@@ -49,20 +49,16 @@ class ResolutionController extends Controller
                 }),
             ],
             'anio' => 'required|integer|digits:4|min:1901|max:2155',
-            'area' => 'required|string|max:255',
-            'pdf_file' => 'required|file|mimes:pdf',
             'area_id' => 'required|exists:areas,id',
             'pdf_file' => 'required|file|mimes:pdf',
         ]);
-
-        $data['pdf_path'] = $request->file('pdf_file')->store('resolutions', 'public');
-
-
         $filePath = $request->file('pdf_file')->store('resolutions', 'public');
+        $area = Area::findOrFail($request->area_id);
         Resolution::create([
             'numero' => $request->numero,
             'anio' => $request->anio,
-            'area' => $request->area,
+            'area_id' => $area->id,
+            'area' => $area->nombre,
             'pdf_path' => $filePath,
         ]);
         return redirect()->route('resolutions.index')
@@ -89,8 +85,6 @@ class ResolutionController extends Controller
                 })->ignore($resolution->id),
             ],
             'anio' => 'required|integer|digits:4|min:1901|max:2155',
-            'area' => 'required|string|max:255',
-            'pdf_file' => 'nullable|file|mimes:pdf',
             'area_id' => 'required|exists:areas,id',
             'pdf_file' => 'nullable|file|mimes:pdf',
         ]);

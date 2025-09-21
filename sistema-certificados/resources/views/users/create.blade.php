@@ -65,15 +65,18 @@
 @section('js')
 <script>
     $(document).ready(function() {
-        $('#role_id').on('change', function() {
-            var selectedRoleName = $(this).find('option:selected').data('role-name');
-            if (selectedRoleName === 'Administrador') {
+        function toggleAreaSelect() {
+            var selectedRoleName = $('#role_id').find('option:selected').data('role-name');
+
+            if (selectedRoleName === 'Administrador' || selectedRoleName === 'Persona') {
                 $('#area-select-container').show();
             } else {
                 $('#area-select-container').hide();
                 $('#area-select-container select').val('');
             }
-        });
+        }
+        toggleAreaSelect();
+        $('#role_id').on('change', toggleAreaSelect);
     });
 </script>
 @endsection

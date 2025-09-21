@@ -27,7 +27,7 @@
             </div>
             <div class="form-group">
                 <label for="ano">Año</label>
-                <input type="number" name="anio" class="form-control" id="anio" placeholder="Ej. 2024" value="{{ old('ano') }}" required>
+                <input type="number" name="anio" class="form-control" id="anio" placeholder="Ej. 2024" value="{{ old('anio') }}" required>
             </div>
             <div class="form-group">
                 <label for="area_id">Área</label>
