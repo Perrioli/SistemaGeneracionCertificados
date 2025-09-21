@@ -22,18 +22,18 @@
             @method('PUT')
             <div class="row">
                 <div class="col-md-4">
-                    <div class="form-group"><label>DNI</label><input type="text" name="dni" class="form-control" value="{{ old('dni', $person->dni) }}" required></div>
+                    <div class="form-group"><label>DNI</label><input type="text" name="dni" class="form-control" value="{{ old('dni', $person->dni) }}" disabled></div>
                 </div>
                 <div class="col-md-4">
-                    <div class="form-group"><label>Apellido</label><input type="text" name="apellido" class="form-control" value="{{ old('apellido', $person->apellido) }}" required></div>
+                    <div class="form-group"><label>Apellido</label><input type="text" name="apellido" class="form-control" value="{{ old('apellido', $person->apellido) }}" disabled></div>
                 </div>
                 <div class="col-md-4">
-                    <div class="form-group"><label>Nombre</label><input type="text" name="nombre" class="form-control" value="{{ old('nombre', $person->nombre) }}" required></div>
+                    <div class="form-group"><label>Nombre</label><input type="text" name="nombre" class="form-control" value="{{ old('nombre', $person->nombre) }}" disabled></div>
                 </div>
             </div>
             <div class="row">
                 <div class="col-md-6">
-                    <div class="form-group"><label>Título</label><input type="text" name="titulo" class="form-control" value="{{ old('titulo', $person->titulo) }}" required></div>
+                    <div class="form-group"><label>Título</label><input type="text" name="titulo" class="form-control" value="{{ old('titulo', $person->titulo) }}" disabled></div>
                 </div>
                 <div class="col-md-6">
                     <div class="form-group"><label>Domicilio</label><input type="text" name="domicilio" class="form-control" value="{{ old('domicilio', $person->domicilio) }}" required></div>
@@ -45,44 +45,6 @@
                 </div>
                 <div class="col-md-6">
                     <div class="form-group"><label>Email (no editable)</label><input type="email" class="form-control" value="{{ $person->email }}" disabled></div>
-                </div>
-            </div>
-            <div class="card card-outline card-secondary collapsed-card mt-4">
-                <div class="card-header">
-                    <h3 class="card-title">Cambiar Contraseña</h3>
-
-                    {{-- Herramientas de la tarjeta que contienen el botón para plegar/desplegar --}}
-                    <div class="card-tools">
-                        <button type="button" class="btn btn-tool" data-card-widget="collapse">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <form method="post" action="{{ route('password.update') }}">
-                        @csrf
-                        @method('put')
-
-                        <div class="form-group">
-                            <label for="current_password">Contraseña Actual</label>
-                            <input id="current_password" name="current_password" type="password" class="form-control" autocomplete="current-password">
-                            @error('current_password', 'updatePassword') <span class="text-danger">{{ $message }}</span> @enderror
-                        </div>
-
-                        <div class="form-group">
-                            <label for="password">Nueva Contraseña</label>
-                            <input id="password" name="password" type="password" class="form-control" autocomplete="new-password">
-                            @error('password', 'updatePassword') <span class="text-danger">{{ $message }}</span> @enderror
-                        </div>
-
-                        <div class="form-group">
-                            <label for="password_confirmation">Confirmar Nueva Contraseña</label>
-                            <input id="password_confirmation" name="password_confirmation" type="password" class="form-control" autocomplete="new-password">
-                            @error('password_confirmation', 'updatePassword') <span class="text-danger">{{ $message }}</span> @enderror
-                        </div>
-
-                        <button type="submit" class="btn btn-primary">Guardar Contraseña</button>
-                    </form>
                 </div>
             </div>
             <button type="submit" class="btn btn-primary">Guardar Cambios</button>
